@@ -1,0 +1,407 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>ÉCO MAISON 3D</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;overflow:hidden;background:#15251e;color:white;font-family:Arial,sans-serif}
+canvas{display:block}
+#hud{position:fixed;inset:0;pointer-events:none}
+.panel{background:#10251edc;border:1px solid #ffffff30;
+border-radius:14px;padding:12px;backdrop-filter:blur(8px)}
+#stats{position:absolute;top:10px;right:10px;width:190px;font-size:12px}
+#stats strong{color:#c9ff78;font-size:17px}
+#missions{position:absolute;top:10px;left:10px;width:235px;font-size:12px}
+h2{font-size:16px;margin:5px 0 10px}
+.task{padding:8px 0;border-top:1px solid #ffffff20}
+.done{color:#baff76}
+#hint{position:absolute;bottom:100px;left:50%;
+transform:translateX(-50%);text-align:center;min-width:220px}
+#cross{position:absolute;top:50%;left:50%;width:8px;height:8px;
+border:1px solid white;border-radius:50%;transform:translate(-50%,-50%)}
+button{pointer-events:auto;touch-action:none;border:0;border-radius:12px;
+background:#c9ff78;color:#17251a;font-weight:bold;padding:13px;cursor:pointer}
+#action{position:absolute;right:20px;bottom:25px;width:85px;height:70px}
+#controls{position:absolute;left:12px;bottom:15px;display:grid;
+grid-template-columns:48px 48px 48px;grid-template-rows:48px 48px;gap:4px}
+#controls button{background:#10251ee8;color:white;padding:0;font-size:19px}
+.up{grid-column:2}.left{grid-column:1;grid-row:2}
+.down{grid-column:2;grid-row:2}.right{grid-column:3;grid-row:2}
+#start{position:fixed;inset:0;z-index:5;display:flex;align-items:center;
+justify-content:center;padding:20px;background:linear-gradient(135deg,#112a20,#426a4b)}
+.card{max-width:470px;background:#10251ef2;border:1px solid #ffffff35;
+border-radius:22px;padding:28px}
+.card h1{font-size:42px;line-height:1;margin:10px 0}
+.card h1 span{color:#c9ff78}
+.card p{line-height:1.6;color:#d5e1d7;font-size:14px}
+#start button{width:100%;margin-top:10px}
+#restart{position:absolute;right:10px;top:90px}
+@media(max-width:550px){
+ #missions{width:185px;padding:8px;font-size:10px;top:8px;left:7px}
+ #missions h2{font-size:13px}
+ #stats{width:145px;padding:8px;font-size:10px;top:8px;right:7px}
+ #stats strong{font-size:14px}
+ #controls{transform:scale(.88);transform-origin:bottom left}
+ #action{right:12px;bottom:22px}
+ #hint{bottom:100px;max-width:90vw}
+}
+</style>
+</head>
+<body>
+
+<div id="start">
+ <div class="card">
+  <div style="color:#c9ff78;font-size:11px;letter-spacing:3px">JEU ÉCOLOGIQUE 3D</div>
+  <h1>ÉCO<br><span>MAISON</span></h1>
+  <p>Explore ta maison, économise l'énergie et fais baisser ta facture !</p>
+  <p>🟢 Missions interactives<br>
+  🏡 Maison en 3D<br>
+  💶 Facture dynamique<br>
+  📱 Compatible tactile et clavier</p>
+  <button id="play">ENTRER DANS LA MAISON →</button>
+  <p style="font-size:11px">Connexion Internet nécessaire pour charger la 3D.</p>
+ </div>
+</div>
+
+<div id="hud">
+ <div id="missions" class="panel">
+  <div style="color:#c9ff78">TES OBJECTIFS</div>
+  <h2>Maison écologique</h2>
+  <div id="tasks"></div>
+ </div>
+ <div id="stats" class="panel">
+  <div>FACTURE MENSUELLE</div>
+  <strong id="bill">180 €</strong>
+  <div style="margin-top:9px">Énergie consommée</div>
+  <strong id="energy">100 %</strong>
+  <div style="margin-top:9px">Score écologique</div>
+  <strong id="score">0</strong>
+ </div>
+ <div id="cross"></div>
+ <div id="hint" class="panel" style="display:none"></div>
+ <div id="controls">
+  <button class="up" data-key="w">▲</button>
+  <button class="left" data-key="a">◀</button>
+  <button class="down" data-key="s">▼</button>
+  <button class="right" data-key="d">▶</button>
+ </div>
+ <button id="action">AGIR ✦</button>
+ <button id="restart">↻</button>
+</div>
+
+<script type="module">
+import * as THREE from
+'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+// SCÈNE 3D
+const scene=new THREE.Scene();
+scene.background=new THREE.Color('#a9cbd1');
+scene.fog=new THREE.Fog('#a9cbd1',18,48);
+
+const camera=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,.1,100);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.1;
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.HemisphereLight(0xe8f5ff,0x536348,2));
+
+const sun=new THREE.DirectionalLight(0xffe4bd,3);
+sun.position.set(-6,12,5);
+sun.castShadow=true;
+sun.shadow.mapSize.set(1024,1024);
+scene.add(sun);
+
+const mat=(color,roughness=.8,metalness=0)=>
+ new THREE.MeshStandardMaterial({color,roughness,metalness});
+
+const wood=mat('#966e4b');
+const wall=mat('#eee9dc');
+const green=mat('#62836b');
+const dark=mat('#263630');
+const white=mat('#f1f0e7');
+const metal=mat('#aabbb8',.3,.5);
+const floor=mat('#b99068');
+const glass=new THREE.MeshStandardMaterial({
+ color:'#9edce8',transparent:true,opacity:.4,roughness:.1
+});
+
+function box(name,x,y,z,w,h,d,material){
+ const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material);
+ o.name=name;
+ o.position.set(x,y,z);
+ o.castShadow=true;
+ o.receiveShadow=true;
+ scene.add(o);
+ return o;
+}
+function sphere(x,y,z,r,material){
+ const o=new THREE.Mesh(new THREE.SphereGeometry(r,20,16),material);
+ o.position.set(x,y,z);
+ o.castShadow=true;
+ scene.add(o);
+ return o;
+}
+
+// MAISON
+box('sol',0,-.15,0,18,.3,16,floor);
+box('mur du fond',0,2,-8,18,4,.2,wall);
+box('mur gauche',-9,2,0,.2,4,16,wall);
+box('mur droit',9,2,0,.2,4,16,wall);
+box('plafond',0,4.1,0,18,.2,16,wall);
+box('cloison',-.5,1.5,-3,.12,3,9,wall);
+
+// Fenêtres
+box('cadre fenêtre',-5.5,2.4,-7.85,3,2,.12,wood);
+box('vitre',-5.5,2.4,-7.76,2.8,1.8,.04,glass);
+box('croisillon',-5.5,2.4,-7.7,.07,1.8,.06,white);
+box('croisillon',-5.5,2.4,-7.7,2.8,.07,.06,white);
+
+// Salon
+box('tapis',-5,.08,.2,5.5,.04,4,mat('#d6cbb1'));
+box('canapé',-5,.65,2,3.8,.8,1.2,green);
+box('dossier',-5,1.25,2.5,3.8,1,.3,green);
+box('table basse',-4.5,.6,-.1,2,.15,1,wood);
+box('meuble télé',-7.8,.5,-4.5,1.2,.8,.7,wood);
+box('télévision',-7.8,1.5,-4.5,2.2,1.3,.12,dark);
+box('écran',-7.8,1.5,-4.42,2,.95,.025,mat('#31515b'));
+
+// Cuisine
+box('plan de travail',4,1.25,-6.6,7,.18,1,white);
+for(let i=0;i<5;i++){
+ box('placard',1.2+i*1.3,.65,-6.6,1.15,1.1,.9,
+ mat(i%2?'#b6c4b5':'#d5d3c6'));
+ box('placard haut',1.5+i*1.3,2.5,-7.6,1.15,1,.35,green);
+}
+box('frigo',7.5,1.45,-6.6,1.2,2.8,1.2,white);
+box('porte frigo',7.5,1.45,-5.97,1.08,2.65,.05,mat('#e2e9e5'));
+
+// Table et chaises
+box('table',2,.85,-.1,3,.15,1.5,wood);
+for(const x of [.8,3.2]){
+ for(const z of [-.6,.6]){
+  box('pied table',x,.4,z,.12,.8,.12,wood);
+ }
+ box('chaise',x,.5,1.2,.7,.15,.7,green);
+ box('dossier chaise',x,.95,1.5,.7,.8,.12,green);
+}
+
+// Chambre
+box('lit',6,.45,2.7,4,.6,4,wood);
+box('matelas',6,.82,2.7,3.8,.25,3.8,white);
+box('couette',6,.97,3.2,3.7,.12,2.4,green);
+box('tête de lit',6,1.15,.7,4,1,.15,wood);
+box('armoire',8.2,1.55,-.9,1.3,3,1.5,wood);
+box('table de nuit',4,.6,.9,.8,1,.8,wood);
+
+// Salle de bain
+box('sol salle de bain',-5.6,.04,-5.6,6,.06,4.5,mat('#b7d1d0'));
+box('machine à laver',-7.5,.7,-4.8,1.2,1.3,1.2,white);
+box('hublot machine',-7.5,.7,-4.15,.65,.65,.06,metal);
+box('douche',-4,1,-6.3,1.8,2,.1,glass);
+box('lavabo',-7.5,1,-6.7,1.2,.15,.8,white);
+
+// Panneaux solaires décoratifs
+for(let i=0;i<4;i++){
+ box('panneau solaire',-6+i*3.8,4.35,-2,3.2,.08,3.5,
+ mat('#20516b',.25,.3));
+}
+
+// Jardin
+const grass=mat('#55945a');
+box('jardin',0,-.4,11,30,.2,12,grass);
+box('allée',0,-.28,8,2,.12,6,mat('#c9c1ad'));
+for(let i=0;i<12;i++){
+ const x=-14+(i%6)*5.5;
+ const z=9+Math.floor(i/6)*5;
+ const trunk=new THREE.Mesh(
+  new THREE.CylinderGeometry(.15,.22,1.2,12),wood);
+ trunk.position.set(x,.35,z);scene.add(trunk);
+ sphere(x,1.5,z,1,mat('#46854c'));
+ sphere(x+.3,1.9,z-.2,.6,mat('#5d9b56'));
+}
+
+// OBJETS ET MISSIONS
+const missions=[
+ {id:'tv',name:'📺 Éteindre la télévision',desc:'Évite la veille inutile.',
+  pos:[-7.8,1.5,-4.5],save:9,energy:5,points:100},
+ {id:'heat',name:'🌡️ Régler le chauffage',desc:'Choisis 19 °C dans les pièces de vie.',
+  pos:[-.8,1.6,-7.7],save:24,energy:13,points:150},
+ {id:'fridge',name:'🧊 Régler le frigo',desc:'Vérifie le bon réglage du réfrigérateur.',
+  pos:[7.5,1.5,-6.6],save:8,energy:4,points:100},
+ {id:'wash',name:'🧺 Programme éco',desc:'Lance une machine pleine à basse température.',
+  pos:[-7.5,.8,-4.8],save:14,energy:8,points:150},
+ {id:'light',name:'💡 Éteindre les lumières',desc:'Coupe les éclairages inutiles.',
+  pos:[-8.5,1.5,-1.5],save:12,energy:7,points:100},
+ {id:'water',name:'🚿 Économiser l’eau chaude',desc:'Privilégie une douche courte.',
+  pos:[-4,1.3,-6.3],save:11,energy:4,points:120},
+ {id:'solar',name:'☀️ Découvrir le solaire',desc:'Repère les panneaux photovoltaïques.',
+  pos:[-.5,4.35,-2],save:18,energy:10,points:180}
+];
+
+const markers=[];
+for(const m of missions){
+ const g=new THREE.Group();
+ g.position.set(...m.pos);
+ scene.add(g);
+ const ring=new THREE.Mesh(
+  new THREE.TorusGeometry(.28,.035,8,24),
+  new THREE.MeshBasicMaterial({color:'#c9ff78'}));
+ ring.rotation.x=Math.PI/2;
+ ring.position.y=.45;
+ g.add(ring);
+ const orb=new THREE.Mesh(
+  new THREE.SphereGeometry(.1,16,12),
+  new THREE.MeshBasicMaterial({color:'#fff1ac'}));
+ orb.position.y=.45;g.add(orb);
+ markers.push({m,g,done:false,ring});
+}
+
+// JOUEUR
+const player={x:0,y:1.65,z:6,yaw:0,pitch:0};
+const keys={};
+let completed=new Set(),score=0,savings=0,energy=100,near=null,playing=false;
+const $=id=>document.getElementById(id);
+
+function drawTasks(){
+ $('tasks').innerHTML='';
+ missions.forEach(m=>{
+  const el=document.createElement('div');
+  el.className='task '+(completed.has(m.id)?'done':'');
+  el.textContent=(completed.has(m.id)?'✓ ':'○ ')+m.name;
+  $('tasks').appendChild(el);
+ });
+}
+function updateStats(){
+ $('bill').textContent=Math.max(0,180-savings)+' €';
+ $('energy').textContent=energy+' %';
+ $('score').textContent=score;
+}
+function interact(){
+ if(!playing)return;
+ if(!near){$('hint').textContent='Approche-toi d’un repère vert !';return}
+ const m=near.m;
+ if(completed.has(m.id))return;
+ completed.add(m.id);near.done=true;near.g.visible=false;
+ savings+=m.save;energy=Math.max(10,energy-m.energy);score+=m.points;
+ updateStats();drawTasks();
+ $('hint').textContent='Mission réussie ! +'+m.points+' points';
+ if(completed.size===missions.length){
+  setTimeout(()=>alert('Bravo ! Toutes les missions sont terminées !\\nFacture simulée : '+Math.max(0,180-savings)+' €/mois.\\nÉconomies simulées : '+savings+' €/mois.\\nScore : '+score),200);
+ }
+}
+$('action').onclick=interact;
+
+$('play').onclick=()=>{
+ $('start').style.display='none';playing=true;
+ if(!matchMedia('(pointer:coarse)').matches)
+  renderer.domElement.requestPointerLock?.();
+};
+$('restart').onclick=()=>{
+ completed.clear();score=0;savings=0;energy=100;
+ player.x=0;player.z=6;player.yaw=0;player.pitch=0;
+ markers.forEach(o=>{o.done=false;o.g.visible=true});
+ updateStats();drawTasks();$('hint').style.display='none';
+};
+
+// CLAVIER
+document.addEventListener('keydown',e=>{
+ keys[e.key.toLowerCase()]=true;
+ if(e.key.toLowerCase()==='e'||e.key===' ')interact();
+});
+document.addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+let locked=false;
+document.addEventListener('pointerlockchange',()=>{
+ locked=document.pointerLockElement===renderer.domElement;
+});
+document.addEventListener('mousemove',e=>{
+ if(locked){
+  player.yaw-=e.movementX*.002;
+  player.pitch=Math.max(-1,Math.min(1,player.pitch-e.movementY*.002));
+ }
+});
+renderer.domElement.addEventListener('click',()=>{
+ if(playing&&!matchMedia('(pointer:coarse)').matches&&!locked)
+  renderer.domElement.requestPointerLock?.();
+});
+
+// TACTILE : boutons de déplacement et glissement pour regarder
+const keyMap={w:'w',a:'a',s:'s',d:'d'};
+document.querySelectorAll('[data-key]').forEach(btn=>{
+ const k=keyMap[btn.dataset.key];
+ btn.addEventListener('pointerdown',e=>{
+  e.preventDefault();keys[k]=true;
+  try{btn.setPointerCapture(e.pointerId)}catch(_){}
+ });
+ for(const ev of ['pointerup','pointercancel','lostpointercapture'])
+  btn.addEventListener(ev,()=>keys[k]=false);
+});
+let lookId=null,lastX=0,lastY=0;
+renderer.domElement.addEventListener('pointerdown',e=>{
+ if(!playing||!matchMedia('(pointer:coarse)').matches)return;
+ if(e.clientX<innerWidth*.3&&e.clientY>innerHeight*.55)return;
+ lookId=e.pointerId;lastX=e.clientX;lastY=e.clientY;
+});
+renderer.domElement.addEventListener('pointermove',e=>{
+ if(e.pointerId!==lookId)return;
+ player.yaw-=(e.clientX-lastX)*.005;
+ player.pitch=Math.max(-1,Math.min(1,player.pitch-(e.clientY-lastY)*.005));
+ lastX=e.clientX;lastY=e.clientY;
+});
+function release(e){if(e.pointerId===lookId)lookId=null}
+renderer.domElement.addEventListener('pointerup',release);
+renderer.domElement.addEventListener('pointercancel',release);
+
+// BOUCLE DU JEU
+const direction=new THREE.Vector3();
+const clock=new THREE.Clock();
+function animate(){
+ requestAnimationFrame(animate);
+ const dt=Math.min(clock.getDelta(),.04);
+ if(playing){
+  const forward=new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw));
+  const right=new THREE.Vector3(Math.cos(player.yaw),0,-Math.sin(player.yaw));
+  direction.set(0,0,0);
+  if(keys.w||keys.z||keys.arrowup)direction.add(forward);
+  if(keys.s||keys.arrowdown)direction.sub(forward);
+  if(keys.d||keys.arrowright)direction.add(right);
+  if(keys.a||keys.q||keys.arrowleft)direction.sub(right);
+  if(direction.lengthSq())direction.normalize().multiplyScalar(4*dt);
+  player.x=Math.max(-8.5,Math.min(8.5,player.x+direction.x));
+  player.z=Math.max(-7.5,Math.min(12,player.z+direction.z));
+  camera.position.set(player.x,player.y,player.z);
+  camera.rotation.order='YXZ';
+  camera.rotation.set(player.pitch,player.yaw,0);
+
+  near=null;let best=2.6;
+  const look=new THREE.Vector3(0,0,-1).applyQuaternion(camera.quaternion);
+  markers.forEach(o=>{
+   if(o.done)return;
+   o.ring.rotation.z+=dt;
+   const d=o.g.position.clone().sub(camera.position);
+   const dist=d.length();
+   if(dist<best&&d.normalize().dot(look)>.1){near=o;best=dist}
+  });
+  $('hint').style.display=near?'block':'none';
+  if(near)$('hint').textContent='✦ '+near.m.name+' — appuie sur E ou AGIR';
+ }
+ renderer.render(scene,camera);
+}
+drawTasks();updateStats();animate();
+
+addEventListener('resize',()=>{
+ camera.aspect=innerWidth/innerHeight;
+ camera.updateProjectionMatrix();
+ renderer.setSize(innerWidth,innerHeight);
+ renderer.setPixelRatio(Math.min(devicePixelRatio,1.7));
+});
+</script>
+</body>
+</html>
